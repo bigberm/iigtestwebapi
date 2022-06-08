@@ -11,11 +11,13 @@ using Owin;
 using iigtestwebapi.Providers;
 using iigtestwebapi.Models;
 using static iigtestwebapi.ApplicationUserManager;
+using Microsoft.Owin.Cors;
 
 namespace iigtestwebapi
 {
     public partial class Startup
     {
+   
         public static OAuthAuthorizationServerOptions OAuthOptions { get; private set; }
 
         public static string PublicClientId { get; private set; }
@@ -23,6 +25,7 @@ namespace iigtestwebapi
         // For more information on configuring authentication, please visit https://go.microsoft.com/fwlink/?LinkId=301864
         public void ConfigureAuth(IAppBuilder app)
         {
+            app.UseCors(CorsOptions.AllowAll);
             // Configure the db context and user manager to use a single instance per request
             app.CreatePerOwinContext(ApplicationDbContext.Create);
             app.CreatePerOwinContext<ApplicationUserManager>(ApplicationUserManager.Create);
@@ -37,7 +40,7 @@ namespace iigtestwebapi
             PublicClientId = "self";
             OAuthOptions = new OAuthAuthorizationServerOptions
             {
-                TokenEndpointPath = new PathString("/Token"),
+                TokenEndpointPath = new PathString("/token"),
                 Provider = new ApplicationOAuthProvider(PublicClientId),
                 AuthorizeEndpointPath = new PathString("/api/Account/ExternalLogin"),
                 AccessTokenExpireTimeSpan = TimeSpan.FromDays(14),
@@ -45,6 +48,7 @@ namespace iigtestwebapi
                 AllowInsecureHttp = true
             };
 
+            app.UseOAuthAuthorizationServer(OAuthOptions);
             // Enable the application to use bearer tokens to authenticate users
             app.UseOAuthBearerTokens(OAuthOptions);
 

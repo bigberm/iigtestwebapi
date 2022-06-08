@@ -20,7 +20,7 @@ using static iigtestwebapi.ApplicationUserManager;
 
 namespace iigtestwebapi.Controllers
 {
-   // [Authorize]
+    [Authorize]
     [RoutePrefix("api/Account")]
     public class AccountController : ApiController
     {
@@ -98,24 +98,24 @@ namespace iigtestwebapi.Controllers
         [Route("Login")]
         public async Task<IHttpActionResult> GetLogin(LoginViewModel model)
         {
-         
+
             // This doesn't count login failures towards account lockout
             // To enable password failures to trigger account lockout, change to shouldLockout: true
-            //var result = await SignInManager.PasswordSignInAsync(model.UserName, model.Password,false, shouldLockout: false);
-            //switch (result)
-            //{
-            //    case SignInStatus.Success:
-            //        return Ok();
-            //    //case SignInStatus.LockedOut:
-            //    //    return View("Lockout");
-            //    //case SignInStatus.RequiresVerification:
-            //    //    return RedirectToAction("SendCode", new { ReturnUrl = returnUrl, RememberMe = model.RememberMe });
-            //    //case SignInStatus.Failure:
-            //    //default:
-            //    //    ModelState.AddModelError("", "Invalid login attempt.");
-            //    //    return View(model);
-            //}
-            return Ok();
+            var result = await SignInManager.PasswordSignInAsync(model.UserName, model.Password, false, shouldLockout: false);
+            switch (result)
+            {
+                case SignInStatus.Success:
+                    return Ok();
+                    //    //case SignInStatus.LockedOut:
+                    //    //    return View("Lockout");
+                    //    //case SignInStatus.RequiresVerification:
+                    //    //    return RedirectToAction("SendCode", new { ReturnUrl = returnUrl, RememberMe = model.RememberMe });
+                    //    //case SignInStatus.Failure:
+                    //    //default:
+                    //    //    ModelState.AddModelError("", "Invalid login attempt.");
+                    //    //    return View(model);
+            }
+                    return Ok();
         }
         // POST: /Account/Login
         [HttpPost]
@@ -407,9 +407,9 @@ namespace iigtestwebapi.Controllers
             }
 
 
-            var user = new ApplicationUser() { UserName = model.UserName, firstName = model.FirstName, lastName = model.LastName,profileImage=model.ProfileImage };
+            var user = new ApplicationUser() { UserName = model.UserName, Email=model.Email, firstName = model.FirstName, lastName = model.LastName,profileImage=model.ProfileImage };
 
-             IdentityResult result = await UserManager.CreateAsync(user);
+             IdentityResult result = await UserManager.CreateAsync(user, model.Password);
 
            
 
