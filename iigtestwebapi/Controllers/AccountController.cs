@@ -17,10 +17,16 @@ using iigtestwebapi.Models;
 using iigtestwebapi.Providers;
 using iigtestwebapi.Results;
 using static iigtestwebapi.ApplicationUserManager;
+using System.Web.Hosting;
+using System.Configuration;
+using System.Linq;
+using System.IO;
+using System.Net;
+using System.Net.Http.Headers;
 
 namespace iigtestwebapi.Controllers
 {
-    [Authorize]
+   // [Authorize]
     [RoutePrefix("api/Account")]
     public class AccountController : ApiController
     {
@@ -30,10 +36,8 @@ namespace iigtestwebapi.Controllers
         private ApplicationSignInManager _signInManager;
 
         public AccountController()
-        {
-           
+        {          
         }
-
         public AccountController(ApplicationUserManager userManager,  ApplicationSignInManager signInManager,
             ISecureDataFormat<AuthenticationTicket> accessTokenFormat)
         {
@@ -99,23 +103,14 @@ namespace iigtestwebapi.Controllers
         public async Task<IHttpActionResult> GetLogin(LoginViewModel model)
         {
 
-            // This doesn't count login failures towards account lockout
-            // To enable password failures to trigger account lockout, change to shouldLockout: true
             var result = await SignInManager.PasswordSignInAsync(model.UserName, model.Password, false, shouldLockout: false);
             switch (result)
             {
                 case SignInStatus.Success:
                     return Ok();
-                    //    //case SignInStatus.LockedOut:
-                    //    //    return View("Lockout");
-                    //    //case SignInStatus.RequiresVerification:
-                    //    //    return RedirectToAction("SendCode", new { ReturnUrl = returnUrl, RememberMe = model.RememberMe });
-                    //    //case SignInStatus.Failure:
-                    //    //default:
-                    //    //    ModelState.AddModelError("", "Invalid login attempt.");
-                    //    //    return View(model);
+                    
             }
-                    return Ok();
+            return Ok();
         }
         // POST: /Account/Login
         [HttpPost]
@@ -149,6 +144,117 @@ namespace iigtestwebapi.Controllers
             Authentication.SignOut(CookieAuthenticationDefaults.AuthenticationType);
             return Ok();
         }
+        [HttpGet]
+        [Route("GetUserInfo")]
+        public async Task<ApplicationUser> GetUserInfo(string userId)
+        {
+            var userData = await UserManager.FindByIdAsync(userId);
+
+            return userData;
+
+        }
+        [HttpGet]
+        [Route("GetProfileImage")]
+        public  HttpResponseMessage GetProfileImage(string userId)
+        {
+            try
+            {
+                string filePath = HostingEnvironment.MapPath(ConfigurationManager.AppSettings["FileUploadLocation"]);
+                HttpResponseMessage response = new HttpResponseMessage();
+                var userData =  UserManager.FindById(userId);
+                if (userData != null)
+                {
+
+                    MemoryStream stream = new MemoryStream(userData.profileImage);
+                    response.Content = new StreamContent(stream);
+
+                }
+                return response;
+            }
+            catch (Exception ex)
+            {
+                return  Request.CreateResponse(HttpStatusCode.BadRequest, ex);
+            }
+
+        }
+        [HttpPost]
+        [Route("UploadProfileImage")]
+        public async Task<ApplicationUser> UploadProfileImage()
+        {
+
+            ApplicationUser userInfo = null;
+            try
+            {
+                var fileuploadPath = HostingEnvironment.MapPath(ConfigurationManager.AppSettings["FileUploadLocation"]);
+
+                var provider = new MultipartFormDataStreamProvider(fileuploadPath);
+
+                var content = new StreamContent(HttpContext.Current.Request.GetBufferlessInputStream(true));
+                foreach (var header in Request.Content.Headers)
+                {
+                    content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+
+                await content.ReadAsMultipartAsync(provider);
+
+
+                //Code for renaming the random file to Original file name
+                string userId = provider.FormData.GetValues("userId").SingleOrDefault();
+                string uploadingFileName = provider.FileData.Select(x => x.LocalFileName).FirstOrDefault();
+                string originalFileName = String.Concat(fileuploadPath, "\\" + userId + "_" + (provider.Contents[0].Headers.ContentDisposition.FileName).Trim(new Char[] { '"' }));
+                string fileName = userId + "_" + provider.Contents[0].Headers.ContentDisposition.FileName.Trim(new Char[] { '"' });
+
+
+
+                if (File.Exists(originalFileName))
+                {
+                    File.Delete(originalFileName);
+                }
+
+                File.Move(uploadingFileName, originalFileName);
+                //Code renaming ends...
+
+                //update path name to user profile 
+                if (userId != null && userId != "")
+                {
+                     userInfo = await UserManager.FindByIdAsync(userId);
+                    byte[] imageData = null;
+
+                
+                    if (userInfo != null)
+                    {
+                      
+                        using (FileStream fs = new FileStream(originalFileName, FileMode.Open, FileAccess.Read))
+                        {
+                            imageData = new Byte[fs.Length];
+                            fs.Read(imageData, 0, (int)fs.Length);
+                        }
+
+                        if (imageData != null)
+                        {
+                            userInfo.profileImage = imageData;
+                        }
+
+                        await UserManager.UpdateAsync(userInfo);
+                    }
+
+                    //Delete temp
+                    if (File.Exists(originalFileName))
+                    {
+                        File.Delete(originalFileName);
+                    }
+                }
+
+                return userInfo;
+            }
+            catch (Exception ex)
+            {
+                return null;
+            }
+
+        }
+
+       
 
         // GET api/Account/ManageInfo?returnUrl=%2F&generateState=true
         [Route("ManageInfo")]
@@ -229,202 +335,99 @@ namespace iigtestwebapi.Controllers
             return Ok();
         }
 
-        // POST api/Account/AddExternalLogin
-        //[Route("AddExternalLogin")]
-        //public async Task<IHttpActionResult> AddExternalLogin(AddExternalLoginBindingModel model)
-        //{
-        //    if (!ModelState.IsValid)
-        //    {
-        //        return BadRequest(ModelState);
-        //    }
-
-        //    Authentication.SignOut(DefaultAuthenticationTypes.ExternalCookie);
-
-        //    AuthenticationTicket ticket = AccessTokenFormat.Unprotect(model.ExternalAccessToken);
-
-        //    if (ticket == null || ticket.Identity == null || (ticket.Properties != null
-        //        && ticket.Properties.ExpiresUtc.HasValue
-        //        && ticket.Properties.ExpiresUtc.Value < DateTimeOffset.UtcNow))
-        //    {
-        //        return BadRequest("External login failure.");
-        //    }
-
-        //    ExternalLoginData externalData = ExternalLoginData.FromIdentity(ticket.Identity);
-
-        //    if (externalData == null)
-        //    {
-        //        return BadRequest("The external login is already associated with an account.");
-        //    }
-
-        //    IdentityResult result = await UserManager.AddLoginAsync(User.Identity.GetUserId(),
-        //        new UserLoginInfo(externalData.LoginProvider, externalData.ProviderKey));
-
-        //    if (!result.Succeeded)
-        //    {
-        //        return GetErrorResult(result);
-        //    }
-
-        //    return Ok();
-        //}
-
-        // POST api/Account/RemoveLogin
-        //[Route("RemoveLogin")]
-        //public async Task<IHttpActionResult> RemoveLogin(RemoveLoginBindingModel model)
-        //{
-        //    if (!ModelState.IsValid)
-        //    {
-        //        return BadRequest(ModelState);
-        //    }
-
-        //    IdentityResult result;
-
-        //    if (model.LoginProvider == LocalLoginProvider)
-        //    {
-        //        result = await UserManager.RemovePasswordAsync(User.Identity.GetUserId());
-        //    }
-        //    else
-        //    {
-        //        result = await UserManager.RemoveLoginAsync(User.Identity.GetUserId(),
-        //            new UserLoginInfo(model.LoginProvider, model.ProviderKey));
-        //    }
-
-        //    if (!result.Succeeded)
-        //    {
-        //        return GetErrorResult(result);
-        //    }
-
-        //    return Ok();
-        //}
-
-        // GET api/Account/ExternalLogin
-        //[OverrideAuthentication]
-        //[HostAuthentication(DefaultAuthenticationTypes.ExternalCookie)]
-        //[AllowAnonymous]
-        //[Route("ExternalLogin", Name = "ExternalLogin")]
-        //public async Task<IHttpActionResult> GetExternalLogin(string provider, string error = null)
-        //{
-        //    if (error != null)
-        //    {
-        //        return Redirect(Url.Content("~/") + "#error=" + Uri.EscapeDataString(error));
-        //    }
-
-        //    if (!User.Identity.IsAuthenticated)
-        //    {
-        //        return new ChallengeResult(provider, this);
-        //    }
-
-        //    ExternalLoginData externalLogin = ExternalLoginData.FromIdentity(User.Identity as ClaimsIdentity);
-
-        //    if (externalLogin == null)
-        //    {
-        //        return InternalServerError();
-        //    }
-
-        //    if (externalLogin.LoginProvider != provider)
-        //    {
-        //        Authentication.SignOut(DefaultAuthenticationTypes.ExternalCookie);
-        //        return new ChallengeResult(provider, this);
-        //    }
-
-        //    ApplicationUser user = await UserManager.FindAsync(new UserLoginInfo(externalLogin.LoginProvider,
-        //        externalLogin.ProviderKey));
-
-        //    bool hasRegistered = user != null;
-
-        //    if (hasRegistered)
-        //    {
-        //        Authentication.SignOut(DefaultAuthenticationTypes.ExternalCookie);
-                
-        //         ClaimsIdentity oAuthIdentity = await user.GenerateUserIdentityAsync(UserManager,
-        //            OAuthDefaults.AuthenticationType);
-        //        ClaimsIdentity cookieIdentity = await user.GenerateUserIdentityAsync(UserManager,
-        //            CookieAuthenticationDefaults.AuthenticationType);
-
-        //        AuthenticationProperties properties = ApplicationOAuthProvider.CreateProperties(user.UserName);
-        //        Authentication.SignIn(properties, oAuthIdentity, cookieIdentity);
-        //    }
-        //    else
-        //    {
-        //        IEnumerable<Claim> claims = externalLogin.GetClaims();
-        //        ClaimsIdentity identity = new ClaimsIdentity(claims, OAuthDefaults.AuthenticationType);
-        //        Authentication.SignIn(identity);
-        //    }
-
-        //    return Ok();
-        //}
-
-        // GET api/Account/ExternalLogins?returnUrl=%2F&generateState=true
-        //[AllowAnonymous]
-        //[Route("ExternalLogins")]
-        //public IEnumerable<ExternalLoginViewModel> GetExternalLogins(string returnUrl, bool generateState = false)
-        //{
-        //    IEnumerable<AuthenticationDescription> descriptions = Authentication.GetExternalAuthenticationTypes();
-        //    List<ExternalLoginViewModel> logins = new List<ExternalLoginViewModel>();
-
-        //    string state;
-
-        //    if (generateState)
-        //    {
-        //        const int strengthInBits = 256;
-        //        state = RandomOAuthStateGenerator.Generate(strengthInBits);
-        //    }
-        //    else
-        //    {
-        //        state = null;
-        //    }
-
-        //    foreach (AuthenticationDescription description in descriptions)
-        //    {
-        //        ExternalLoginViewModel login = new ExternalLoginViewModel
-        //        {
-        //            Name = description.Caption,
-        //            Url = Url.Route("ExternalLogin", new
-        //            {
-        //                provider = description.AuthenticationType,
-        //                response_type = "token",
-        //                client_id = Startup.PublicClientId,
-        //                redirect_uri = new Uri(Request.RequestUri, returnUrl).AbsoluteUri,
-        //                state = state
-        //            }),
-        //            State = state
-        //        };
-        //        logins.Add(login);
-        //    }
-
-        //    return logins;
-        //}
-
-        // POST api/Account/Register
         [AllowAnonymous]
+        [HttpPost]
         [Route("Register")]
-        public async Task<IHttpActionResult> Register(RegisterBindingModel model)
+        public async Task<IHttpActionResult> RegisterUpload()
         {
 
-
-            if (!ModelState.IsValid)
+            try
             {
-                return BadRequest(ModelState);
+                RegisterBindingModel model = new RegisterBindingModel();
+                var fileuploadPath = HostingEnvironment.MapPath(ConfigurationManager.AppSettings["FileUploadLocation"]);
+
+                var provider = new MultipartFormDataStreamProvider(fileuploadPath);
+
+                var content = new StreamContent(HttpContext.Current.Request.GetBufferlessInputStream(true));
+                foreach (var header in Request.Content.Headers)
+                {
+                    content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+
+                await content.ReadAsMultipartAsync(provider);
+
+                string uploadingFileName = provider.FileData.Select(x => x.LocalFileName).FirstOrDefault();
+                string originalFileName = String.Concat(fileuploadPath, "\\" + model.UserName + "_" + (provider.Contents[0].Headers.ContentDisposition.FileName).Trim(new Char[] { '"' }));
+                string fileName = model.UserName + "_" + provider.Contents[0].Headers.ContentDisposition.FileName.Trim(new Char[] { '"' });
+
+
+                model.Email = provider.FormData.GetValues("Email").SingleOrDefault();
+                model.UserName = provider.FormData.GetValues("UserName").SingleOrDefault();
+                model.LastName = provider.FormData.GetValues("LastName").SingleOrDefault();
+                model.FirstName = provider.FormData.GetValues("FirstName").SingleOrDefault();
+                model.Password = provider.FormData.GetValues("Password").SingleOrDefault();
+                model.ConfirmPassword = provider.FormData.GetValues("ConfirmPassword").SingleOrDefault();
+
+                if (File.Exists(originalFileName))
+                {
+                    File.Delete(originalFileName);
+                }
+
+                File.Move(uploadingFileName, originalFileName);
+                //Code renaming ends...
+
+                //update path name to company profile 
+                if (model.UserName != null && model.UserName != "")
+                {
+                    byte[] imageData = null;
+
+
+                    using (FileStream fs = new FileStream(originalFileName, FileMode.Open, FileAccess.Read))
+                    {
+                        imageData = new Byte[fs.Length];
+                        fs.Read(imageData, 0, (int)fs.Length);
+                    }
+
+                    if (imageData != null)
+                    {
+                        model.ProfileImage = imageData;
+                    }
+
+
+                }
+                //Delete temp file
+                if (File.Exists(originalFileName))
+                {
+                    File.Delete(originalFileName);
+                }
+
+                var user = new ApplicationUser() { UserName = model.UserName, Email = model.Email, firstName = model.FirstName, lastName = model.LastName, profileImage = model.ProfileImage };
+
+                IdentityResult result = await UserManager.CreateAsync(user, model.Password);
+
+                if (!result.Succeeded)
+                {
+                    if (result.Errors != null)
+                    {
+                        string errMsg = "";
+                        foreach (string error in result.Errors)
+                        {
+                            errMsg=errMsg+" "+error;
+                        }
+                        return Ok(errMsg);
+                    }
+                   
+                }
+
+            }
+            catch (Exception ex)
+            {
+                return Ok(ex.Message);
             }
 
 
-            var user = new ApplicationUser() { UserName = model.UserName, Email=model.Email, firstName = model.FirstName, lastName = model.LastName,profileImage=model.ProfileImage };
-
-             IdentityResult result = await UserManager.CreateAsync(user, model.Password);
-
-           
-
-
-            if (!result.Succeeded)
-            {
-                return GetErrorResult(result);
-            }
-           
-
-
-
-            return Ok();
+            return Ok("Success");
         }
-
         //// POST api/Account/RegisterExternal
         //[OverrideAuthentication]
         //[HostAuthentication(DefaultAuthenticationTypes.ExternalBearer)]
