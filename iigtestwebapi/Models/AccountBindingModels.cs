@@ -16,6 +16,10 @@ namespace iigtestwebapi.Models
     public class ChangePasswordBindingModel
     {
         [Required]
+        [Display(Name = "UserId")]
+        public string UserId { get; set; }
+
+        [Required]
         [DataType(DataType.Password)]
         [Display(Name = "Current password")]
         public string OldPassword { get; set; }

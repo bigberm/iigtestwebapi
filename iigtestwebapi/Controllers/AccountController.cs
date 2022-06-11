@@ -26,7 +26,7 @@ using System.Net.Http.Headers;
 
 namespace iigtestwebapi.Controllers
 {
-   // [Authorize]
+    [Authorize]
     [RoutePrefix("api/Account")]
     public class AccountController : ApiController
     {
@@ -87,14 +87,14 @@ namespace iigtestwebapi.Controllers
         [HttpGet]
         [AllowAnonymous]
         [Route("GetUserNameIsExist")]
-        public async Task<bool> GetUserNameIsExist(string username)
+        public async Task<IHttpActionResult> GetUserNameIsExist(string username)
         {
             //
             var userdata = await UserManager.FindByNameAsync(username);
             if (userdata != null)
-                return true;
+                return Ok("true");
 
-            return false;
+            return Ok("false");
         }
         // POST: /Account/Login
         [HttpPost]
@@ -146,16 +146,26 @@ namespace iigtestwebapi.Controllers
         }
         [HttpGet]
         [Route("GetUserInfo")]
-        public async Task<ApplicationUser> GetUserInfo(string userId)
+        public async Task<UserProfileModel> GetUserInfo(string userId)
         {
+            var userInfo = new UserProfileModel();
             var userData = await UserManager.FindByIdAsync(userId);
+            if (userData != null)
+            { 
+                userInfo.UserName = userData.UserName;
+                userInfo.Email=userData.Email;
+                userInfo.LastName = userData.lastName;
+                userInfo.FirstName = userData.firstName;
+                userInfo.UserId = userData.Id;
+            }
+            
 
-            return userData;
+            return userInfo;
 
         }
         [HttpGet]
         [Route("GetProfileImage")]
-        public  HttpResponseMessage GetProfileImage(string userId)
+        public HttpResponseMessage GetProfileImage(string userId)
         {
             try
             {
@@ -177,6 +187,35 @@ namespace iigtestwebapi.Controllers
             }
 
         }
+        [HttpPost]
+        [Route("UpdateUserProfile")]
+        public async Task<IHttpActionResult> UpdateUserProfile(UserProfileModel model)
+        {
+            //get user
+            var userData = await UserManager.FindByIdAsync(model.UserId);
+            if (userData != null)
+            {
+                userData.firstName = model.FirstName;
+                userData.lastName = model.LastName;
+                userData.Email = model.Email;
+                IdentityResult result = await UserManager.UpdateAsync(userData);
+
+                if (!result.Succeeded)
+                {
+                    string errMsg = "";
+                    foreach (string error in result.Errors)
+                    {
+                        errMsg += errMsg + " ";
+                    }
+                    return Ok(errMsg);
+
+                }
+
+            }
+
+            return Ok("Success");
+        }
+
         [HttpPost]
         [Route("UploadProfileImage")]
         public async Task<ApplicationUser> UploadProfileImage()
@@ -253,9 +292,6 @@ namespace iigtestwebapi.Controllers
             }
 
         }
-
-       
-
         // GET api/Account/ManageInfo?returnUrl=%2F&generateState=true
         [Route("ManageInfo")]
         public async Task<ManageInfoViewModel> GetManageInfo(string returnUrl, bool generateState = false)
@@ -305,15 +341,21 @@ namespace iigtestwebapi.Controllers
                 return BadRequest(ModelState);
             }
 
-            IdentityResult result = await UserManager.ChangePasswordAsync(User.Identity.GetUserId(), model.OldPassword,
+            IdentityResult result = await UserManager.ChangePasswordAsync(model.UserId, model.OldPassword,
                 model.NewPassword);
             
             if (!result.Succeeded)
             {
-                return GetErrorResult(result);
+                string errMsg = "";
+                foreach (string error in result.Errors)
+                {
+                    errMsg += errMsg + " "+error;
+                }
+                return Ok(errMsg);
+               
             }
 
-            return Ok();
+            return Ok("Success");
         }
 
         // POST api/Account/SetPassword
@@ -412,7 +454,7 @@ namespace iigtestwebapi.Controllers
                         string errMsg = "";
                         foreach (string error in result.Errors)
                         {
-                            errMsg=errMsg+" "+error;
+                            errMsg+=errMsg+" "+error;
                         }
                         return Ok(errMsg);
                     }
@@ -428,38 +470,7 @@ namespace iigtestwebapi.Controllers
 
             return Ok("Success");
         }
-        //// POST api/Account/RegisterExternal
-        //[OverrideAuthentication]
-        //[HostAuthentication(DefaultAuthenticationTypes.ExternalBearer)]
-        //[Route("RegisterExternal")]
-        //public async Task<IHttpActionResult> RegisterExternal(RegisterExternalBindingModel model)
-        //{
-        //    if (!ModelState.IsValid)
-        //    {
-        //        return BadRequest(ModelState);
-        //    }
-
-        //    var info = await Authentication.GetExternalLoginInfoAsync();
-        //    if (info == null)
-        //    {
-        //        return InternalServerError();
-        //    }
-
-        //    var user = new ApplicationUser() { UserName = model.Email, Email = model.Email };
-
-        //    IdentityResult result = await UserManager.CreateAsync(user);
-        //    if (!result.Succeeded)
-        //    {
-        //        return GetErrorResult(result);
-        //    }
-
-        //    result = await UserManager.AddLoginAsync(user.Id, info.Login);
-        //    if (!result.Succeeded)
-        //    {
-        //        return GetErrorResult(result); 
-        //    }
-        //    return Ok();
-        //}
+     
 
         protected override void Dispose(bool disposing)
         {
